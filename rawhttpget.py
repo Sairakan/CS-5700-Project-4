@@ -6,7 +6,14 @@ Authors: Jason Teng, Jae Son
 """
 
 from socket import AF_PACKET, SOCK_RAW, IPPROTO_RAW, IPPROTO_IP
-import socket
+import socket, argparse
+
+parser = argparse.ArgumentParser(description='Client script for Project 4')
+parser.add_argument('url', help='URL')
+
+args = parser.parse_args()
+
+url = args.url
 
 sendSock = socket.socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)
 recSock = socket.socket(AF_PACKET, SOCK_RAW, IPPROTO_IP)
