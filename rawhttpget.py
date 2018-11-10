@@ -5,7 +5,7 @@ Spyder Editor
 Authors: Jason Teng, Jae Son
 """
 
-from socket import AF_PACKET, AF_INET, SOCK_RAW, SOCK_STREAM, IPPROTO_RAW, IPPROTO_TCP
+from socket import AF_INET, SOCK_RAW, IPPROTO_RAW, IPPROTO_TCP
 import socket, argparse, struct
 
 parser = argparse.ArgumentParser(description='Client script for Project 4')
@@ -26,3 +26,26 @@ print(hostIP)
 for i in range(10):
     packet = recSock.recv(65565)
     print(packet)
+
+"""
+Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
+Returns the new message with the TCP header added.
+PARAMETERS:
+src: the source port
+dest: the destination port
+seq: the sequence number
+ack: the acknowledgement number
+offset: the offset
+flags: any flags
+awnd: the advertised window
+chksm: the checksum
+urg: the urgent pointer
+opt: any options
+data: the data to be wrapped
+RETURNS:
+the packet wrapped with the TCP header
+"""
+def TCPWrapper(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
+    tcp_header = struct.pack('!HHLLBBHHH', src, dest, seq, ack, offset, flags, awnd, chksm, urg)
+    tcp_packet = tcp_header + opt + data
+    return tcp_packet
