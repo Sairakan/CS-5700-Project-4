@@ -274,14 +274,13 @@ for i in range(5):
         print(data)
         if len(data) > 0:
             try:
-                headers, body = parse_response(data)
-                headers = parse_headers(headers.decode())
+                rawheaders, rawbody = parse_response(data)
+                headers = parse_headers(rawheaders.decode())
                 print('headers: ' + str(headers))
-                print('body: ' + str(body))
-                if headers['Content-Encoding'] == 'gzip':
-                    buf = io.BytesIO(body)
-                    f = gzip.GzipFile(fileobj=buf)
-                    print('body: ' + zlib.decompress(body, 31))
+                print('body: ' + str(rawbody))
+                f = open('index.html', 'w+')
+                f.write(rawbody)
+                f.close()
             except UnicodeDecodeError:
                 print('tls packet')
     else:
