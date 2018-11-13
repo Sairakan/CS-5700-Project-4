@@ -266,7 +266,13 @@ def chksum(data):
 
     return s
 
-for i in range(5):
+def get_ip_port(url_name):
+    ip = socket.gethostbyname(url_name)
+    # https port is 443
+    port = 80
+    return (ip, port)
+
+for i in range(1000):
     packet = recSock.recv(65565)
     tcppacket = ipunwrap(packet)
     if tcppacket:
