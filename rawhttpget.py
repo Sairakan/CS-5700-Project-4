@@ -272,7 +272,7 @@ def get_ip_port(url_name):
     port = 80
     return (ip, port)
 
-for i in range(1000):
+for i in range(10):
     packet = recSock.recv(65565)
     tcppacket = ipunwrap(packet)
     if tcppacket:
