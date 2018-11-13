@@ -119,6 +119,6 @@ for i in range(10):
     tcppacket = ipunwrap(packet)
     if tcppacket:
         data = tcpunwrap(tcppacket)
+        print(data)
     else:
         print('not a tcp packet')
-    print(data)
