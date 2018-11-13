@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Spyder Editor
-
 Authors: Jason Teng, Jae Son
 """
 
 from socket import AF_INET, SOCK_RAW, IPPROTO_RAW, IPPROTO_TCP
-import socket, argparse, struct
+import socket, argparse, struct, gzip, io, zlib
+from base64 import b64decode
 
 parser = argparse.ArgumentParser(description='Client script for Project 4')
 parser.add_argument('url', help='URL')
@@ -25,6 +24,25 @@ print(hostIP)
 
 hostIP_hex = bytes(map(int, hostIP.split('.')))
 
+# takes a HTTP message and returns the raw header and html as separate strings
+def parse_response(response):
+    s = response.split(b'\r\n\r\n', 1)
+    if len(s) < 2:
+        return s[0], ''
+    return s[0], s[1]
+
+# takes a string of headers and returns a dictionary of the headers
+def parse_headers(rawheaders):
+    headers = {}
+    rawheaders = rawheaders.splitlines()[1:-1]
+    for s in rawheaders:
+        header = s.split(': ', 1)
+        if header[0] in headers:
+            headers[header[0]] = headers.get(header[0]) + '\n' + header[1]
+        else:
+            headers[header[0]] = header[1]
+    return headers
+
 ip_header_format = '!BBHHHBBH4s4s'
 ip_header_keys = ['ver_ihl', 'tos', 'tot_len', 'id', 'frag_off', 'ttl', 'proto', 'check', 'src', 'dest']
 tcp_header_format = '!HHLLBBHHH'
@@ -41,14 +59,14 @@ ip_ttl = 255
 ip_proto = socket.IPPROTO_TCP
 ip_check = 0    # kernel will fill the correct checksum
 ip_saddr = socket.inet_aton(hostIP)
-ip_daddr = socket.inet_aton('8.8.8.8')
+ip_daddr = socket.inet_aton('0.0.0.0')
 
 ip_ihl_ver = (ip_ver << 4) + ip_ihl
 
 # the ! in the pack format string means network order
 ip_header = struct.pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
 
-def tcpwrapper(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
+def tcpwrap(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
     Returns the new message with the TCP header added.
@@ -99,26 +117,40 @@ def ipunwrap(ip_packet):
     ihl = ip_headers['ver_ihl'] & 0xF
     print('ihl: ' + str(ihl))
 
-
     # check that this is the destination
     if ip_headers['dest'] != hostIP_hex:
         return None
 
     # check that is tcp packet
+    print('protocol: ' + str(ip_headers['proto']))
     if ip_headers['proto'] != 0x06:
         return None
 
     print('size of ip packet: ' + str(ip_headers['tot_len']))
+    print('ip_id: ' + str(ip_headers['id']))
     # get the data from the ip packet
     ip_data = ip_packet[4*ihl:]
     return ip_data
 
 
-for i in range(10):
+for i in range(5):
     packet = recSock.recv(65565)
     tcppacket = ipunwrap(packet)
     if tcppacket:
         data = tcpunwrap(tcppacket)
+        print(data)
+        if len(data) > 0:
+            try:
+                headers, body = parse_response(data)
+                headers = parse_headers(headers.decode())
+                print('headers: ' + str(headers))
+                print('body: ' + str(body))
+                if headers['Content-Encoding'] == 'gzip':
+                    buf = io.BytesIO(body)
+                    f = gzip.GzipFile(fileobj=buf)
+                    print('body: ' + zlib.decompress(body, 31))
+            except UnicodeDecodeError:
+                print('tls packet')
     else:
         print('not a tcp packet')
-    print(data)
+
