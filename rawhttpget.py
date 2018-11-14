@@ -272,6 +272,8 @@ def get_ip_port(url_name):
     port = 80
     return (ip, port)
 
+
+f = open('index.html', 'wb+')
 for i in range(5):
     packet = recSock.recv(65565)
     tcppacket = ipunwrap(packet)
@@ -284,11 +286,10 @@ for i in range(5):
                 headers = parse_headers(rawheaders.decode())
                 print('headers: ' + str(headers))
                 print('body: ' + str(rawbody))
-                f = open('index.html', 'w+')
                 f.write(rawbody)
-                f.close()
             except UnicodeDecodeError:
                 print('tls packet')
     else:
         print('not a tcp packet')
 
+f.close()
