@@ -233,7 +233,8 @@ def tcpunwrap(tcp_packet):
     """
     tcp_header_vals = struct.unpack(tcp_header_format, tcp_packet[0:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
-    # verify the tcp headers
+    # TODO: verify the tcp headers
+
     # check for options
     offset = tcp_headers['off_res'] >> 4
     print('offset: ' + str(offset))
@@ -258,20 +259,20 @@ def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, des
     :param check: the checksum to be used (must be pre-calculated)
     :param src: the source IP address
     :param dest: the destination IP address
-    :return:
+    :return: the full IP packet
     """
     ver_ihl = (version << 4) + ihl
 
-    # the ! in the pack format string means network order
     return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
 
 def ipunwrap(ip_packet):
     ip_header_vals = struct.unpack(ip_header_format, ip_packet[0:20])
     ip_headers = dict(zip(ip_header_keys, ip_header_vals))
-    # verify the ip header is correct
-
-    ihl = ip_headers['ver_ihl'] & 0xF
-    print('ihl: ' + str(ihl))
+    # TODO: verify the ip header is correct
+    version = ip_headers['ver_ihl'] >> 4
+    if version != 4:
+        return None
+    ihl = ip_headers['ver_ihl'] & 0x0F
 
     # check that this is the destination
     if ip_headers['dest'] != hostIP_hex:
@@ -301,7 +302,7 @@ def checksum(data):
         elif (i+1)==len(data):
             s += ord(data[i])
         else:
-            raise "Something Wrong here"
+            raise ValueError("Something Wrong here")
 
 
     # One's Complement
@@ -375,12 +376,15 @@ def run():
             if len(data) > 0:
                 try:
                     rawheaders, rawbody = parse_response(data)
+                except UnicodeDecodeError:
+                    print('tls packet')
+                try:
                     headers = parse_headers(rawheaders.decode())
                     print('headers: ' + str(headers))
                     print('body: ' + str(rawbody))
                     f.write(rawbody)
-                except UnicodeDecodeError:
-                    print('tls packet')
+                except IndexError:
+                    print('body: ' + str(rawbody))
         else:
             print('not a tcp packet')
 
