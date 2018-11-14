@@ -178,6 +178,30 @@ ip_ihl_ver = (ip_ver << 4) + ip_ihl
 # the ! in the pack format string means network order
 ip_header = struct.pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
 
+
+# tcp header fields
+tcp_source = 3306	# source port
+tcp_dest = 80	# destination port
+tcp_seq = 454
+tcp_ack_seq = 0
+tcp_doff = 5	#4 bit field, size of tcp header, 5 * 4 = 20 bytes
+#tcp flags
+tcp_fin = 0
+tcp_syn = 1
+tcp_rst = 0
+tcp_psh = 0
+tcp_ack = 0
+tcp_urg = 0
+tcp_window = socket.htons (5840)	#	maximum allowed window size
+tcp_check = 0
+tcp_urg_ptr = 0
+
+tcp_offset_res = (tcp_doff << 4) + 0
+tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
+
+# the ! in the pack format string means network order
+tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
+
 def tcpwrap(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
@@ -219,7 +243,7 @@ def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, des
     ver_ihl = (ip_ver << 4) + ip_ihl
 
     # the ! in the pack format string means network order
-    ip_header = struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
+    return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
 
 def ipunwrap(ip_packet):
     ip_header_vals = struct.unpack(ip_header_format, ip_packet[0:20])
@@ -245,7 +269,7 @@ def ipunwrap(ip_packet):
     return ip_data
 
 # Referenced from Suraj Bisht of Bitforestinfo
-def chksum(data):
+def checksum(data):
     s = 0
 
     # loop taking 2 characters at a time
@@ -266,11 +290,52 @@ def chksum(data):
 
     return s
 
-def get_ip_port(url_name):
-    ip = socket.gethostbyname(url_name)
-    # https port is 443
-    port = 80
-    return (ip, port)
+# VERY untested. To be completed later.
+def tcp_handshake():
+    tcp_seq = 1
+    tcp_ack_seq = 0
+    
+    ip_header = ipwrap(ip_ver, ip_ihl, ip_tos, ip_tot_len, ip_id, ip_frag_off, 
+                       ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
+    tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, 
+                        tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, 
+                        tcp_urg_ptr) 
+    
+    dest_ip = socket.gethostbyname(url)
+    source_address = socket.inet_aton( hostIP )
+    dest_address = socket.inet_aton(dest_ip)
+    placeholder = 0
+    protocol = socket.IPPROTO_TCP
+    tcp_length = len(tcp_header)
+    
+    psh = struct.pack('!4s4sBBH' , source_address , dest_address , placeholder , protocol , tcp_length);
+    psh = psh + tcp_header;
+    
+    new_check = checksum(psh)
+    tcp_header = tcpwrap('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, 
+                        tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, 
+                        struct.pack('H' , new_check),
+                        struct.pack('!H' , tcp_urg_ptr))
+    
+    # final full packet - syn packets dont have any data
+    packet = ip_header + tcp_header
+    s.sendto(packet, (dest_ip , 0 ))
+    
+    received = s.recvfrom(1024)
+    received_ack = received[3]
+    
+    if tcp_seq == received_ack - 1:
+        tcp_seq = 2
+    
+        tcp_header = tcpwrap('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, 
+                            tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, 
+                            struct.pack('H' , new_check),
+                            struct.pack('!H' , tcp_urg_ptr))
+        packet = ip_header + tcp_header
+        s.sendto(packet, (dest_ip, 0))
+    else:
+        print "Handshake failed!"
+#############################################################################
 
 for i in range(5):
     packet = recSock.recv(65565)
