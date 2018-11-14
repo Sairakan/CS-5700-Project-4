@@ -337,24 +337,33 @@ def tcp_handshake():
         print "Handshake failed!"
 #############################################################################
 
+def run():
+    # TODO: change the file name based on the given url
+    f = open('index.html', 'wb+')
 
-f = open('index.html', 'wb+')
-for i in range(5):
-    packet = recSock.recv(65565)
-    tcppacket = ipunwrap(packet)
-    if tcppacket:
-        data = tcpunwrap(tcppacket)
-        print(data)
-        if len(data) > 0:
-            try:
-                rawheaders, rawbody = parse_response(data)
-                headers = parse_headers(rawheaders.decode())
-                print('headers: ' + str(headers))
-                print('body: ' + str(rawbody))
-                f.write(rawbody)
-            except UnicodeDecodeError:
-                print('tls packet')
-    else:
-        print('not a tcp packet')
+    # TODO: perform TCP handshake, get seq/ack numbers for use in rest of program
 
-f.close()
+    # TODO: send HTTP GET request (maybe can be done at the end of the handshake?)
+
+    # TODO: get the HTTP response (by listening and responding with appropriate acks)
+    for i in range(5):
+        packet = recSock.recv(65565)
+        tcppacket = ipunwrap(packet)
+        if tcppacket:
+            data = tcpunwrap(tcppacket)
+            print(data)
+            if len(data) > 0:
+                try:
+                    rawheaders, rawbody = parse_response(data)
+                    headers = parse_headers(rawheaders.decode())
+                    print('headers: ' + str(headers))
+                    print('body: ' + str(rawbody))
+                    f.write(rawbody)
+                except UnicodeDecodeError:
+                    print('tls packet')
+        else:
+            print('not a tcp packet')
+
+    f.close()
+
+run()
