@@ -128,6 +128,7 @@ url = args.url
 
 sendSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_RAW)
 recSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_TCP)
+recSock.settimeout(180000)
 
 # gets the host ip by creating a connection to Google and observing the socket parameters
 hostIP = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
@@ -202,30 +203,34 @@ tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack
 # the ! in the pack format string means network order
 tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
 
-def tcpwrap(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
+
+def tcpwrap(src, dest, seq, ack, flags, awnd, chksm, urg, opt, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
-    Returns the new message with the TCP header added.
-    PARAMETERS:
-    src: the source port
-    dest: the destination port
-    seq: the sequence number
-    ack: the acknowledgement number
-    offset: the offset
-    flags: any flags
-    awnd: the advertised window
-    chksm: the checksum
-    urg: the urgent pointer
-    opt: any options
-    data: the data to be wrapped
-    RETURNS:
-    the packet wrapped with the TCP header
+    Returns the new message with the TCP header added. Offset is automatically calculated.
+    :param src: the source port
+    :param dest: the destination port
+    :param seq: the sequence number
+    :param ack: the acknowledgment number
+    :param flags: any flags
+    :param awnd: the advertised window
+    :param chksm: the checksum to be used
+    :param urg: the urgent pointer
+    :param opt: any options
+    :param data: the data to be wrapped
+    :return: the packet wrapped with the TCP header
     """
-    tcp_header = struct.pack(tcp_header_format, src, dest, seq, ack, offset, flags, awnd, chksm, urg)
-    tcp_packet = tcp_header + opt + data
+    offset = 5 + len(opt)/4
+    tcp_header = struct.pack('!HHLLBBH', src, dest, seq, ack, offset << 4, flags,  awnd) + struct.pack('H', chksm) + struct.pack('!H', urg) + opt
+    tcp_packet = tcp_header + data
     return tcp_packet
 
 def tcpunwrap(tcp_packet):
+    """
+    Takes a tcp packet and extracts out the header, returning the contained data. Validates the tcp header.
+    :param tcp_packet: the packet to be unwrapped
+    :return: the unwrapped data
+    """
     tcp_header_vals = struct.unpack(tcp_header_format, tcp_packet[0:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
     # verify the tcp headers
@@ -239,8 +244,23 @@ def tcpunwrap(tcp_packet):
     tcp_data = tcp_packet[4*offset:]
     return tcp_data
 
-def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest):
-    ver_ihl = (ip_ver << 4) + ip_ihl
+def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest, data):
+    """
+    Takes in the IP header parameters and constructs a IP header, which is added to the given data and returned.
+    :param version: the IP version to use
+    :param ihl: the length of the header, in 4-byte words
+    :param tos: the Type of Service
+    :param tot_len: the total length of the IP packet in bytes (header + data)
+    :param id: the ID of the packet
+    :param frag_off: the fragment offset
+    :param ttl: the time to live of the packet
+    :param proto: the protocol of the enclosed packet
+    :param check: the checksum to be used (must be pre-calculated)
+    :param src: the source IP address
+    :param dest: the destination IP address
+    :return:
+    """
+    ver_ihl = (version << 4) + ihl
 
     # the ! in the pack format string means network order
     return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
@@ -334,7 +354,7 @@ def tcp_handshake():
         packet = ip_header + tcp_header
         s.sendto(packet, (dest_ip, 0))
     else:
-        print "Handshake failed!"
+        print("Handshake failed!")
 #############################################################################
 
 def run():

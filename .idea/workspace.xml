@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c70dcd85-410c-4150-9539-564f7b8829a6" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rawhttpget" beforeDir="false" afterPath="$PROJECT_DIR$/rawhttpget" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rawhttpget.py" beforeDir="false" afterPath="$PROJECT_DIR$/rawhttpget.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -24,12 +25,12 @@
       </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
-          <entry key="py" value="729" />
+          <entry key="py" value="1980" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="Python" value="729" />
+          <entry key="Python" value="1980" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.open" />
@@ -74,8 +75,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/rawhttpget.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="287">
-              <caret line="347" column="85" selection-start-line="347" selection-start-column="85" selection-end-line="347" selection-end-column="85" />
+            <state relative-caret-position="-1714">
+              <caret line="259" column="43" selection-start-line="259" selection-start-column="43" selection-end-line="259" selection-end-column="43" />
             </state>
           </provider>
         </entry>
@@ -192,8 +193,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/rawhttpget.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="287">
-          <caret line="347" column="85" selection-start-line="347" selection-start-column="85" selection-end-line="347" selection-end-column="85" />
+        <state relative-caret-position="-1714">
+          <caret line="259" column="43" selection-start-line="259" selection-start-column="43" selection-end-line="259" selection-end-column="43" />
         </state>
       </provider>
     </entry>
