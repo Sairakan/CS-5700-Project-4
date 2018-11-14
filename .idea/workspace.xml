@@ -2,7 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="c70dcd85-410c-4150-9539-564f7b8829a6" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rawhttpget.py" beforeDir="false" afterPath="$PROJECT_DIR$/rawhttpget.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -54,14 +53,14 @@
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
           <entry key="Python Console" value="570" />
-          <entry key="py" value="3996" />
+          <entry key="py" value="4004" />
           <entry key="rawhttpget" value="6" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
           <entry key="Bash" value="6" />
-          <entry key="Python" value="4566" />
+          <entry key="Python" value="4574" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.vcs.git.usages" />
@@ -72,8 +71,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/rawhttpget.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="330">
-              <caret line="257" column="29" lean-forward="true" selection-start-line="257" selection-start-column="29" selection-end-line="257" selection-end-column="29" />
+            <state relative-caret-position="195">
+              <caret line="272" column="35" lean-forward="true" selection-start-line="272" selection-start-column="35" selection-end-line="272" selection-end-column="35" />
               <folding>
                 <element signature="e#3434#3496#0" expanded="true" />
               </folding>
@@ -195,8 +194,8 @@
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/rawhttpget.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="330">
-          <caret line="257" column="29" lean-forward="true" selection-start-line="257" selection-start-column="29" selection-end-line="257" selection-end-column="29" />
+        <state relative-caret-position="195">
+          <caret line="272" column="35" lean-forward="true" selection-start-line="272" selection-start-column="35" selection-end-line="272" selection-end-column="35" />
           <folding>
             <element signature="e#3434#3496#0" expanded="true" />
           </folding>

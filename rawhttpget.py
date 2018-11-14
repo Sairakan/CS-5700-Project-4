@@ -281,7 +281,7 @@ for i in range(5):
                 if headers['Content-Encoding'] == 'gzip':
                     buf = io.BytesIO(body)
                     f = gzip.GzipFile(fileobj=buf)
-                    print('body: ' + zlib.decompress(body, 31))
+                    print('body: ' + zlib.decompress(body, -zlib.MAX_WBITS))
             except UnicodeDecodeError:
                 print('tls packet')
     else:
