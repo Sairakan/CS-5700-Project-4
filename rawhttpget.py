@@ -85,6 +85,10 @@ OFFSET = 5
 seq = random.randint(0,1000000)
 ack = 0
 
+# Keeps track of out-of-order packets
+lastOrderedSeq = 0
+packetBuffer = []
+
 def tcpwrap(seq, ack, flags, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
@@ -213,7 +217,9 @@ def ip_verify_checksum(headerVals):
 # VERY untested. To be completed later.
 # TODO: finish function and test
 def tcp_handshake():
+    global lastOrderedSeq
     seq = random.randint(0,1000000)
+    lastOrderedSeq = seq
     #tcp flags
     tcp_fin = 0
     tcp_syn = 1
@@ -223,7 +229,7 @@ def tcp_handshake():
     tcp_urg = 0
     tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
     
-    sendPacket(seq, 0, tcp_flags, '', '')
+    sendPacket(seq, 0, tcp_flags, '')
     
     received = s.recvfrom(1024)
     received_ack = received[3]
@@ -252,8 +258,57 @@ def sendPacket(seq, ack, flags, data):
     tcpPacket = tcpwrap(seq, ack, flags, data)
     ipPacket = ipwrap(tcpPacket)
     s.sendto(ipPacket, (DEST_ADDR , DEST_PORT))
-#############################################################################
+    
+def packetInOrder(packet):
+    global lastOrderedSeq
+    tcpPacket = ipunwrap(packet)
+    tcp_header_vals = unpack(tcp_header_format, tcpPacket[0:20])
+    
+    packetSeq = tcp_header_vals[2]
+    if packetSeq == lastOrderedSeq + 1:
+        lastOrderedSeq += 1
+        return True
+    else:
+        return False
 
+def bufferPacket(packet):
+    packetBuffer.append(packet)
+    if len(packetBuffer) > 10:
+        packetBuffer.clear()
+        print ("Packet probably dropped. Resend the appropriate request.")
+        #TODO: Resend GET request
+        
+def putPacketsInOrder(packet):
+    # Returns list of in-order packets while updating lastOrderedSeq 
+    global lastOrderedSeq
+    global packetBuffer
+    
+    tcpPkt = ipunwrap(packet)
+    tcpHeader = unpack(tcp_header_format, tcpPkt[0:20])
+    pktSeq = tcpHeader[2]
+    lastSeq = pktSeq    
+    
+    orderedPackets = [packet]
+    temp = packetBuffer
+    
+    i = 0
+    while i < len(packetBuffer):
+        p = packetBuffer[i]
+        tcpPacket = ipunwrap(p)
+        tcp_header_vals = unpack(tcp_header_format, tcpPacket[0:20])
+        packetSeq = tcp_header_vals[2]
+        
+        if packetSeq == lastSeq + 1:
+            orderedPackets.append(p)
+            lastSeq += 1
+            temp.remove(p)
+        
+        i += 1
+    packetBuffer = temp
+    lastOrderedSeq = lastSeq
+    return orderedPackets
+    
+#############################################################################
 def run():
     fileName = change_file_name(url)
         
@@ -266,6 +321,9 @@ def run():
     # TODO: send HTTP GET request (maybe can be done at the end of the handshake?)
 
     # TODO: get the HTTP response (by listening and responding with appropriate acks)
+    # AFTERWARDS! call packetInOrder(packet)
+    # if returns false, run bufferPacket(packet)
+    # then upon the first True-returned packetInOrder, call putPacketsInOrder
     for i in range(5):
         packet = recSock.recv(65565)
         tcppacket = ipunwrap(packet)
