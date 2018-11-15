@@ -3,8 +3,9 @@
 Authors: Jason Teng, Jae Son
 """
 from socket import AF_INET, SOCK_RAW, IPPROTO_RAW, IPPROTO_TCP
-import socket, argparse, struct, gzip, io, zlib
+import socket, argparse, gzip, io, zlib, random
 from base64 import b64decode
+from struct import pack, unpack
 
 parser = argparse.ArgumentParser(description='Client script for Project 4')
 parser.add_argument('url', help='URL')
@@ -47,68 +48,49 @@ ip_header_format = '!BBHHHBBH4s4s'
 ip_header_keys = ['ver_ihl', 'tos', 'tot_len', 'id', 'frag_off', 'ttl', 'proto', 'check', 'src', 'dest']
 tcp_header_format = '!HHLLBBHHH'
 tcp_header_keys = ['src', 'dest', 'seq', 'ack', 'off_res', 'flags', 'awnd', 'chksm', 'urg']
+pseudo_header_format = '4s4sBBH'
 
-# ip header fields
-ip_ihl = 5
-ip_ver = 4
-ip_tos = 0
-ip_tot_len = 0  # kernel will fill the correct total length
-ip_id = 54321   # Id of this packet
-ip_frag_off = 0
-ip_ttl = 255
-ip_proto = socket.IPPROTO_TCP
-ip_check = 0    # kernel will fill the correct checksum
-ip_saddr = socket.inet_aton(hostIP)
-ip_daddr = socket.inet_aton('0.0.0.0')
+# These should be constant for the whole program, while sending packets
+# TCP Side
+SRC_PORT = random.randint(1024, 65530)
+DEST_PORT = 80
+URG = 0
+AWND = socket.htons(1500) # MTU of ethernet
 
-ip_ihl_ver = (ip_ver << 4) + ip_ihl
+# IP Side
+VERSION = 4
+IHL = 5
+IHL_VERSION = (VERSION << 4) + IHL
+TOS = 0
+FRAG_OFF = 0
+IP_HDR_LEN = 20
+TTL = 255
+PROTO = socket.IPPROTO_TCP
+SRC_ADDR = socket.inet_aton(hostIP)
 
-# the ! in the pack format string means network order
-ip_header = struct.pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
-
-
-# tcp header fields
-tcp_source = 8000 # source port
-tcp_dest = 80	# destination port
-tcp_seq = 454
-tcp_ack_seq = 0
-tcp_doff = 5	#4 bit field, size of tcp header, 5 * 4 = 20 bytes
-#tcp flags
-tcp_fin = 0
-tcp_syn = 1
-tcp_rst = 0
-tcp_psh = 0
-tcp_ack = 0
-tcp_urg = 0
-tcp_window = socket.htons (5840)	#	maximum allowed window size
-tcp_check = 0
-tcp_urg_ptr = 0
-
-tcp_offset_res = (tcp_doff << 4) + 0
-tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
-
-# the ! in the pack format string means network order
-tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
-
-
-def tcpwrap(src, dest, seq, ack, flags, awnd, chksm, urg, opt, data):
+def tcpwrap(destAddr, seq, ack, flags, opt, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
     Returns the new message with the TCP header added. Offset is automatically calculated.
-    :param src: the source port
-    :param dest: the destination port
-    :param seq: the sequence number
+    :param destAddr: destination address
+    :param seq: the sequence number of the current packet. += 1 beforehand.
     :param ack: the acknowledgment number
     :param flags: any flags
-    :param awnd: the advertised window
-    :param chksm: the checksum to be used
-    :param urg: the urgent pointer
     :param opt: any options
     :param data: the data to be wrapped
     :return: the packet wrapped with the TCP header
     """
+    
+    # Create pseudo-header to calculate checksum
     offset = 5 + len(opt)/4
-    tcp_header = struct.pack('!HHLLBBH', src, dest, seq, ack, offset << 4, flags,  awnd) + struct.pack('H', chksm) + struct.pack('!H', urg) + opt
+    temp_header = pack(tcp_header_format, SRC_PORT, DEST_PORT, seq, ack, offset << 4, 
+                      flags,  AWND, URG)
+    total_len = len(temp_header) + len(data)
+    pseudo_header = pack(pseudo_header_format , SRC_ADDR , destAddr, 0, PROTO, total_len);
+    check = checksum(temp_header + pseudo_header + data)
+    
+    tcp_header = pack(tcp_header_format , SRC_PORT, DEST_PORT, seq, ack, offset, flags,  
+                      AWND) + pack('H' , check) + pack('!H' , URG)
     tcp_packet = tcp_header + data
     return tcp_packet
 
@@ -118,7 +100,7 @@ def tcpunwrap(tcp_packet):
     :param tcp_packet: the packet to be unwrappedtcp header.
     :return: the unwrapped data
     """
-    tcp_header_vals = struct.unpack(tcp_header_format, tcp_packet[0:20])
+    tcp_header_vals = unpack(tcp_header_format, tcp_packet[0:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
 
     # check for options
@@ -136,28 +118,21 @@ def tcpunwrap(tcp_packet):
         #TCP HEADER OR DATA CHECKSUM HAS FAILED. TODO
         print ('checksum has failed. replicate TCP ACK behavior')
 
-def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest, data):
+def ipwrap(dest_addr, tcp_packet):
     """
     Takes in the IP header parameters and constructs a IP header, which is added to the given data and returned.
-    :param version: the IP version to use
-    :param ihl: the length of the header, in 4-byte words
-    :param tos: the Type of Service
-    :param tot_len: the total length of the IP packet in bytes (header + data)
-    :param id: the ID of the packet
-    :param frag_off: the fragment offset
-    :param ttl: the time to live of the packet
-    :param proto: the protocol of the enclosed packet
-    :param check: the checksum to be used (must be pre-calculated)
-    :param src: the source IP address
-    :param dest: the destination IP address
-    :return: the full IP packet
+    :param dest_addr: the destination IP address
+    :param tcp_packet: the full packet given out by tcpwrap, including payload
+    :return: the full IP packet, including the TCP packet
     """
-    ver_ihl = (version << 4) + ihl
-
-    return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
+    check = 0 # kernel will fill correct checksum
+    pktId = random.randint(0, 65534)
+    total_len = len(tcp_packet) + 20
+    return pack(ip_header_format, IHL_VERSION, TOS, total_len, pktId, FRAG_OFF, 
+                TTL, PROTO, check, SRC_ADDR, dest_addr) + tcp_packet
 
 def ipunwrap(ip_packet):
-    ip_header_vals = struct.unpack(ip_header_format, ip_packet[0:20])
+    ip_header_vals = unpack(ip_header_format, ip_packet[0:20])
     ip_headers = dict(zip(ip_header_keys, ip_header_vals))
     
     version = ip_headers['ver_ihl'] >> 4
@@ -209,26 +184,29 @@ def checksum(msg):
 
 def tcp_verify_checksum(headerVals, opt, data):
     checksum = headerVals[7]
-    headerAndData = struct.pack(tcp_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
+    headerAndData = pack(tcp_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
             headerVals[5], headerVals[6], headerVals[7], headerVals[8], opt, data)
     calculatedChecksum = checksum(headerAndData)
     return (calculatedChecksum == checksum)
     
 def ip_verify_checksum(headerVals):
     checksum = headerVals[7]
-    ipHeader = struct.pack(ip_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
+    ipHeader = pack(ip_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
             headerVals[5], headerVals[6], headerVals[7], headerVals[8], headerVals[9])
     calculatedChecksum = checksum(ipHeader)
     return (calculatedChecksum == checksum)
     
 # VERY untested. To be completed later.
+# Re-implement using sendPacket function
 def tcp_handshake():
+    '''
+    
     tcp_seq = 1
     tcp_ack_seq = 0
     
     ip_header = ipwrap(ip_ver, ip_ihl, ip_tos, ip_tot_len, ip_id, ip_frag_off, 
                        ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
-    tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, 
+    tcp_header = pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, 
                         tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, 
                         tcp_urg_ptr) 
     
@@ -266,6 +244,7 @@ def tcp_handshake():
         s.sendto(packet, (dest_ip, 0))
     else:
         print("Handshake failed!")
+    '''
         
 def change_file_name(myUrl):
     fileName = ''
@@ -283,6 +262,72 @@ def change_file_name(myUrl):
         else:
             fileName = myUrl[lastSlashIndex + 1:]
     return fileName
+
+def sendPacket():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        s.bind(("", "63798"))
+    except socket.error:
+        print ('Socket creation failed!')
+        exit(0)
+    
+    packet = ''; 
+    source_ip = '172.16.87.84'
+    dest_ip = '172.16.10.1'
+    
+    # ip header fields
+    ip_ihl = 5
+    ip_ver = 4
+    ip_tos = 0
+    ip_tot_len = 0
+    ip_id = 54321
+    ip_frag_off = 0
+    ip_ttl = 255
+    ip_proto = socket.IPPROTO_TCP
+    ip_check = 0
+    ip_saddr = socket.inet_aton ( source_ip )
+    ip_daddr = socket.inet_aton ( dest_ip ) 
+    ip_ihl_ver = (ip_ver << 4) + ip_ihl
+    
+    ip_header = pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
+    
+    # tcp header fields
+    tcp_source = 63798   # source port
+    tcp_dest = 8888   # destination port
+    tcp_seq = 104
+    tcp_ack_seq = 0
+    tcp_doff = 5    #4 bit size of tcp header, 5 * 4 = 20 bytes
+    #tcp flags
+    tcp_fin = 0
+    tcp_syn = 1
+    tcp_rst = 0
+    tcp_psh = 0
+    tcp_ack = 0
+    tcp_urg = 0
+    tcp_window = socket.htons (5840)
+    tcp_check = 0
+    tcp_urg_ptr = 0
+    
+    tcp_offset_res = (tcp_doff << 4) + 0
+    tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
+    
+    tcp_header = pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr) 
+    
+    source_address = socket.inet_aton( source_ip )
+    dest_address = socket.inet_aton(dest_ip)
+    placeholder = 0
+    protocol = socket.IPPROTO_TCP
+    tcp_length = len(tcp_header)
+    
+    psh = pack('!4s4sBBH' , source_address , dest_address , placeholder , protocol , tcp_length);
+    psh = psh + tcp_header;
+    
+    tcp_check = checksum(psh)
+    
+    tcp_header = pack('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window) + pack('H' , tcp_check) + pack('!H' , tcp_urg_ptr)
+    
+    packet = ip_header + tcp_header
+    s.sendto(packet, (dest_ip , 8888 ))
 #############################################################################
 
 def run():
