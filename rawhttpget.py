@@ -3,7 +3,11 @@
 Authors: Jason Teng, Jae Son
 """
 from socket import AF_INET, SOCK_RAW, IPPROTO_RAW, IPPROTO_TCP
-import socket, argparse, random, time
+import socket
+import argparse
+import random
+import time
+import binascii
 from struct import pack, unpack
 
 parser = argparse.ArgumentParser(description='Client script for Project 4')
@@ -19,7 +23,8 @@ TIMEOUT = 3
 recSock.settimeout(TIMEOUT)
 
 # gets the host ip by creating a connection to Google and observing the socket parameters
-hostIP = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+hostIP = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close())
+          for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 print(hostIP)
 
 hostIP_hex = bytes(map(int, hostIP.split('.')))
@@ -28,7 +33,7 @@ hostIP_hex = bytes(map(int, hostIP.split('.')))
 def parse_response(response):
     s = response.split(b'\r\n\r\n', 1)
     if len(s) < 2:
-        return s[0], ''
+        return s[0], b''
     return s[0], s[1]
 
 # takes a string of headers and returns a dictionary of the headers
@@ -44,30 +49,32 @@ def parse_headers(rawheaders):
     return headers
 
 ip_header_format = '!BBHHHBBH4s4s'
+ip_header_format_1 = '!BBHHHBB'
+ip_header_format_2 = '!4s4s'
 ip_header_keys = ['ver_ihl', 'tos', 'tot_len', 'id', 'frag_off', 'ttl', 'proto', 'check', 'src', 'dest']
 tcp_temp_header_format = '!HHLLBBHHH'
 tcp_header_format = '!HHLLBBH'
 tcp_header_keys = ['src', 'dest', 'seq', 'ack', 'off_res', 'flags', 'awnd', 'chksm', 'urg']
-pseudo_header_format = '4s4sBBH'
+pseudo_header_format = '!4s4sBBH'
 
 # URL trimming to get host name for DEST_ADDR
 trimUrl = url
-if url.startswith('http://'):
+if trimUrl.startswith('http://'):
     trimUrl = url[7:]
     url = trimUrl
-elif url.startswith('https://'):
-    trimUrl = url[8:]
-    url = trimUrl
+elif trimUrl.startswith('https://'):
+    print("https websites are not supported")
+    exit()
 if '/' in trimUrl:
     i = trimUrl.find('/')
     trimUrl = trimUrl[0:i]
         
 # These should be constant for the whole program, while sending packets
 # TCP Side
-SRC_PORT = 8080
+SRC_PORT = random.randint(1024, 65530)
 DEST_PORT = 80
 OFFSET = 5
-AWND = socket.htons(1500) # MTU of ethernet
+AWND = socket.htons(1500)  # MTU of ethernet
 URG = 0
 
 # IP Side
@@ -85,6 +92,10 @@ DEST_ADDR = socket.inet_aton(socket.gethostbyname(trimUrl))
 # Global variables
 seq = random.randint(0, 2**32)
 ack = 0
+
+# track the seq and ack offsets
+SEQ_OFFSET = 0
+ACK_OFFSET = 0
 
 # Keeps track of out-of-order packets
 lastOrderedSeq = 0
@@ -105,9 +116,10 @@ def tcpwrap(seq, ack, flags, data):
     temp_header = pack(tcp_temp_header_format, SRC_PORT, DEST_PORT, seq, ack, 0x50,
                       flags, AWND, 0, URG)
     total_len = len(temp_header) + len(data)
-    pseudo_header = pack(pseudo_header_format, SRC_ADDR, DEST_ADDR, 0, PROTO, total_len);
-    check = checksum(temp_header + pseudo_header + data.encode())
-    
+    pseudo_header = pack(pseudo_header_format, SRC_ADDR, DEST_ADDR, 0, PROTO, total_len)
+    check = checksum(pseudo_header + temp_header + data.encode())
+
+    # make the real header
     tcp_header = pack(tcp_header_format, SRC_PORT, DEST_PORT, seq, ack, OFFSET << 4, flags,
                       AWND) + pack('H', check) + pack('!H', URG)
     tcp_packet = tcp_header + data.encode()
@@ -119,12 +131,15 @@ def tcpunwrap(tcp_packet):
     :param tcp_packet: the packet to be unwrapped
     :return: a dictionary of the headers and the unwrapped data
     """
-    tcp_header_vals = unpack(tcp_header_format, tcp_packet[0:20])
+    tcp_header_vals = unpack(tcp_header_format, tcp_packet[0:16]) + \
+        unpack('H', tcp_packet[16:18]) + \
+        unpack('!H', tcp_packet[18:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
 
     # check for options
     offset = tcp_headers['off_res'] >> 4
     print('offset: ' + str(offset))
+    options = b''
     if offset > 5:
         options = tcp_packet[20:4*offset]
         print('options: ' + str(options))
@@ -133,12 +148,14 @@ def tcpunwrap(tcp_packet):
 
     if tcp_headers['dest'] != SRC_PORT:
         raise ValueError("incorrect destination port")
-    
-    if tcp_verify_checksum(tcp_header_vals, options, tcp_data):
+
+    pseudo_header = pack(pseudo_header_format, DEST_ADDR, SRC_ADDR, 0, PROTO, len(tcp_packet))
+    if tcp_verify_checksum(pseudo_header, tcp_header_vals, options, tcp_data):
         return tcp_headers, tcp_data
     else:
         #TCP HEADER OR DATA CHECKSUM HAS FAILED. TODO
-        print ('checksum has failed. replicate TCP ACK behavior')
+        print ('tcp checksum has failed. replicate TCP ACK behavior')
+        raise ValueError("incorrect TCP checksum")
 
 def ipwrap(tcp_packet):
     """
@@ -146,11 +163,12 @@ def ipwrap(tcp_packet):
     :param tcp_packet: the full packet given out by tcpwrap, including payload
     :return: the full IP packet, including the TCP packet
     """
-    check = 0 # kernel will fill correct checksum
+    check = 0  # kernel will fill correct checksum
     pktId = random.randint(0, 65534)
     total_len = len(tcp_packet) + 20
-    return pack(ip_header_format, IHL_VERSION, TOS, total_len, pktId, FRAG_OFF, 
-                TTL, PROTO, check, SRC_ADDR, DEST_ADDR) + tcp_packet
+    return pack(ip_header_format_1, IHL_VERSION, TOS, total_len, pktId, FRAG_OFF, TTL, PROTO) + \
+        pack('H', check) + pack(ip_header_format_2, SRC_ADDR, DEST_ADDR) + \
+        tcp_packet
 
 def ipunwrap(ip_packet):
     """
@@ -158,7 +176,9 @@ def ipunwrap(ip_packet):
     :param ip_packet: the packet to be unwrapped
     :return: a dictionary of the headers and the unwrapped data
     """
-    ip_header_vals = unpack(ip_header_format, ip_packet[0:20])
+    ip_header_vals = unpack(ip_header_format_1, ip_packet[0:10]) + \
+        unpack('H', ip_packet[10:12]) + \
+        unpack(ip_header_format_2, ip_packet[12:20])
     ip_headers = dict(zip(ip_header_keys, ip_header_vals))
     
     version = ip_headers['ver_ihl'] >> 4
@@ -184,7 +204,7 @@ def ipunwrap(ip_packet):
         return ip_headers, ip_data
     else:
         #IP HEADER CHECKSUM HAS FAILED. TODO
-        print ('checksum has failed. replicate TCP ACK behavior')
+        print ('ip checksum has failed. replicate TCP ACK behavior')
         raise ValueError("invalid IP checksum")
 
 # Referenced from Suraj Bisht of Bitforestinfo
@@ -193,40 +213,40 @@ def checksum(msg):
 
     # loop taking 2 characters at a time
     for i in range(0, len(msg), 2):
-        if (i+1) < len(msg):
-            a = msg[i]
-            b = msg[i+1]
-            s = s + (a+(b << 8))
-        elif (i+1)==len(msg):
-            s += msg[i]
+        if i == len(msg)-1:
+            w = msg[i]
         else:
-            raise ValueError("Something Wrong here")
+            w = (msg[i]) + (msg[i + 1] << 8)
+        s = s + w
 
+    while s >> 16 != 0:
+        s = (s & 0xffff) + (s >> 16)
 
-    # One's Complement
-    s = s + (s >> 16)
-    s = ~s & 0xffff
+    # complement and mask to 2 byte short
+    res = ~s & 0xffff
+    return ~s & 0xffff
 
-    return s
-
-def tcp_verify_checksum(headerVals, opt, data):
+def tcp_verify_checksum(pseudo_header, headerVals, opt, data):
     chcksm = headerVals[7]
-    headerAndData = pack(tcp_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
-            headerVals[5], headerVals[6], 0, headerVals[8], opt, data)
+    headerAndData = pseudo_header + \
+        pack(tcp_temp_header_format, headerVals[0], headerVals[1], headerVals[2],
+             headerVals[3], headerVals[4], headerVals[5], headerVals[6], 0, headerVals[8]) + \
+        opt + data
     calculatedChecksum = checksum(headerAndData)
+    print('calculated tcp checksum: ' + hex(calculatedChecksum))
     return calculatedChecksum == chcksm
     
 def ip_verify_checksum(headerVals):
     chcksm = headerVals[7]
-    ipHeader = pack(ip_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
-            headerVals[5], headerVals[6], 0, headerVals[8], headerVals[9])
+    ipHeader = pack(ip_header_format, headerVals[0], headerVals[1], headerVals[2], headerVals[3], headerVals[4],
+                    headerVals[5], headerVals[6], 0, headerVals[8], headerVals[9])
     calculatedChecksum = checksum(ipHeader)
     return calculatedChecksum == chcksm
     
 # VERY untested. To be completed later.
 # TODO: finish function and test
 def tcp_handshake():
-    global seq, ack
+    global seq, ack, SEQ_OFFSET, ACK_OFFSET
     #tcp flags
     tcp_fin = 0
     tcp_syn = 1
@@ -239,8 +259,15 @@ def tcp_handshake():
     sendPacket(seq, 0, tcp_flags, '')
 
     starttime = time.clock()
-    while time.clock() < starttime + TIMEOUT:
-        ip_packet = recSock.recv(65536)
+    while True:
+        if time.clock() > starttime + 3:
+            closeConnection()
+            break
+        try:
+            ip_packet = recSock.recv(65536)
+        except socket.timeout:
+            closeConnection()
+            return
         try:
             ip_headers, ip_data = ipunwrap(ip_packet)
         except ValueError:
@@ -256,18 +283,17 @@ def tcp_handshake():
 
     rec_ack = tcp_headers['ack']
     if seq == rec_ack - 1:
-        #TODO
+        # TODO
         print("Got an ACK back. Time to send an ACK and finish handshake.")
         # finish handshake
         # increment sequence number
         seq += 1
         # get the ack number from the SYN/ACK
-        rec_syn = tcp_headers['syn']
-        ack = rec_syn + 1
+        rec_seq = tcp_headers['seq']
+        ack = rec_seq + 1
         # set the flags to ack
         tcp_flags = 0x10
-        # send the ack message
-        sendPacket(seq, ack, tcp_flags, '')
+        sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, tcp_flags, '')
 
     else:
         print("Handshake failed!")
@@ -288,7 +314,7 @@ def change_file_name(myUrl):
 def sendPacket(seq, ack, flags, data):
     tcpPacket = tcpwrap(seq, ack, flags, data)
     ipPacket = ipwrap(tcpPacket)
-    sendSock.sendto(ipPacket, (trimUrl, DEST_PORT))
+    sendSock.sendto(ipPacket, (socket.gethostbyname(trimUrl), DEST_PORT))
     
 def packetInOrder(packet):
     global lastOrderedSeq
@@ -338,29 +364,75 @@ def putPacketsInOrder(packet):
     packetBuffer = temp
     lastOrderedSeq = lastSeq
     return orderedPackets
-    
+
+def closeConnection():
+    pass
+    """
+    print("closing connection")
+    global seq, ack
+    # tcp flags
+    tcp_fin = 1
+    tcp_syn = 0
+    tcp_rst = 0
+    tcp_psh = 0
+    tcp_ack = 0
+    tcp_urg = 0
+    tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh << 3) + (tcp_ack << 4) + (tcp_urg << 5)
+
+    sendPacket(seq, ack, tcp_flags, '')
+    """
+
 #############################################################################
 def run():
+    global seq, ack, SEQ_OFFSET, ACK_OFFSET
     fileName = change_file_name(url)
         
     f = open(fileName, 'wb+')
+    filesize = 0
+    bytes_written = 0
 
-    # TODO: perform TCP handshake, get seq/ack numbers for use in rest of program
     # TODO: ADD THAT TRY/CATCH SOCKET CONNECTION HERE!
     tcp_handshake()
-    
-    # TODO: send HTTP GET request (maybe can be done at the end of the handshake?)
+
+    # send the HTTP GET request
+    # send the ack message, with GET request
+    get_request = 'GET http://' + url + ''' HTTP/1.1
+Host: ''' + trimUrl + '\r\n\r\n'
+    print(get_request)
+    sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x10, get_request)
+    SEQ_OFFSET += len(get_request)
 
     # TODO: get the HTTP response (by listening and responding with appropriate acks)
-    # AFTERWARDS! call packetInOrder(packet)
-    # if returns false, run bufferPacket(packet)
-    # then upon the first True-returned packetInOrder, call putPacketsInOrder
-    for i in range(5):
-        packet = recSock.recv(65565)
-        tcppacket = ipunwrap(packet)
-        if tcppacket:
-            data = tcpunwrap(tcppacket)
-            print(data)
+    done = False
+    while not done:
+        starttime = time.clock()
+        while True:
+            if time.clock() > starttime + TIMEOUT:
+                closeConnection()
+                break
+            try:
+                ip_packet = recSock.recv(65536)
+            except socket.timeout:
+                closeConnection()
+                return
+            try:
+                ip_headers, ip_data = ipunwrap(ip_packet)
+            except ValueError:
+                continue
+            try:
+                tcp_headers, data = tcpunwrap(ip_data)
+                break
+            except ValueError:
+                continue
+
+        # check TCP flag for ack or fin
+        if tcp_headers['flags'] & 0x01 > 0:
+            done = True
+        if tcp_headers['flags'] & 0x10 == 0:
+            return
+
+        rec_ack = tcp_headers['ack']
+        if seq + SEQ_OFFSET == rec_ack:
             if len(data) > 0:
                 try:
                     rawheaders, rawbody = parse_response(data)
@@ -369,13 +441,28 @@ def run():
                 try:
                     headers = parse_headers(rawheaders.decode())
                     print('headers: ' + str(headers))
+                    filesize = int(headers['Content-Length'])
                     print('body: ' + str(rawbody))
-                    f.write(rawbody)
+                    bytes_written += f.write(rawbody)
                 except IndexError:
                     print('body: ' + str(rawbody))
+                    bytes_written += f.write(rawbody)
+                # check for end of file
+                if bytes_written >= filesize:
+                    return
+
+            # set the flags to ack
+            tcp_flags = 0x10
+            ACK_OFFSET += len(data)
+            sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, tcp_flags, '')
+
         else:
-            print('not a tcp packet')
+            print("sequence mismatch (out of order or other error")
+    # AFTERWARDS! call packetInOrder(packet)
+    # if returns false, run bufferPacket(packet)
+    # then upon the first True-returned packetInOrder, call putPacketsInOrder
 
     f.close()
 
 run()
+closeConnection()
