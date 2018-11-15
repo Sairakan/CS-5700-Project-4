@@ -80,14 +80,13 @@ PROTO = socket.IPPROTO_TCP
 SRC_ADDR = socket.inet_aton(hostIP)
 DEST_ADDR = socket.inet_aton(socket.gethostbyname(trimUrl))
 
-def tcpwrap(seq, ack, flags, opt, data):
+def tcpwrap(seq, ack, flags, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
     Returns the new message with the TCP header added. Offset is automatically calculated.
     :param seq: the sequence number of the current packet. += 1 beforehand.
     :param ack: the acknowledgment number
     :param flags: any flags
-    :param opt: any options
     :param data: the data to be wrapped
     :return: the packet wrapped with the TCP header
     """
@@ -226,7 +225,6 @@ def tcp_handshake():
 
     if seq == received_ack - 1:
         #TODO
-        print("Got an ACK back. Time to send an ACK and finish handshake.")
     else:
         print("Handshake failed!")
         
