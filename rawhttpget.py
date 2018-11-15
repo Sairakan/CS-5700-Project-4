@@ -2,119 +2,6 @@
 """
 Authors: Jason Teng, Jae Son
 """
-
-
-
-
-'''
-###############################################################################################
-REFERENCE CODE
-# some imports
-import socket, sys
-from struct import *
-
-# checksum functions needed for calculation checksum
-def checksum(msg):
-	s = 0
-	
-	# loop taking 2 characters at a time
-	for i in range(0, len(msg), 2):
-		w = ord(msg[i]) + (ord(msg[i+1]) << 8 )
-		s = s + w
-	
-	s = (s>>16) + (s & 0xffff);
-	s = s + (s >> 16);
-	
-	#complement and mask to 4 byte short
-	s = ~s & 0xffff
-	
-	return s
-
-#create a raw socket
-try:
-	s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-except socket.error , msg:
-	print 'Socket could not be created. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-	sys.exit()
-
-# tell kernel not to put in headers, since we are providing it, when using IPPROTO_RAW this is not necessary
-# s.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-	
-# now start constructing the packet
-packet = '';
-
-source_ip = '192.168.1.101'
-dest_ip = '192.168.1.1'	# or socket.gethostbyname('www.google.com')
-
-# ip header fields
-ip_ihl = 5
-ip_ver = 4
-ip_tos = 0
-ip_tot_len = 0	# kernel will fill the correct total length
-ip_id = 54321	#Id of this packet
-ip_frag_off = 0
-ip_ttl = 255
-ip_proto = socket.IPPROTO_TCP
-ip_check = 0	# kernel will fill the correct checksum
-ip_saddr = socket.inet_aton ( source_ip )	#Spoof the source ip address if you want to
-ip_daddr = socket.inet_aton ( dest_ip )
-
-ip_ihl_ver = (ip_ver << 4) + ip_ihl
-
-# the ! in the pack format string means network order
-ip_header = pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id, ip_frag_off, ip_ttl, ip_proto, ip_check, ip_saddr, ip_daddr)
-
-# tcp header fields
-tcp_source = 1234	# source port
-tcp_dest = 80	# destination port
-tcp_seq = 454
-tcp_ack_seq = 0
-tcp_doff = 5	#4 bit field, size of tcp header, 5 * 4 = 20 bytes
-#tcp flags
-tcp_fin = 0
-tcp_syn = 1
-tcp_rst = 0
-tcp_psh = 0
-tcp_ack = 0
-tcp_urg = 0
-tcp_window = socket.htons (5840)	#	maximum allowed window size
-tcp_check = 0
-tcp_urg_ptr = 0
-
-tcp_offset_res = (tcp_doff << 4) + 0
-tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
-
-# the ! in the pack format string means network order
-tcp_header = pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
-
-user_data = 'Hello, how are you'
-
-# pseudo header fields
-source_address = socket.inet_aton( source_ip )
-dest_address = socket.inet_aton(dest_ip)
-placeholder = 0
-protocol = socket.IPPROTO_TCP
-tcp_length = len(tcp_header) + len(user_data)
-
-psh = pack('!4s4sBBH' , source_address , dest_address , placeholder , protocol , tcp_length);
-psh = psh + tcp_header + user_data;
-
-tcp_check = checksum(psh)
-#print tcp_checksum
-
-# make the tcp header again and fill the correct checksum - remember checksum is NOT in network byte order
-tcp_header = pack('!HHLLBBH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window) + pack('H' , tcp_check) + pack('!H' , tcp_urg_ptr)
-
-# final full packet - syn packets dont have any data
-packet = ip_header + tcp_header + user_data
-
-#Send the packet finally - the port specified has no effect
-s.sendto(packet, (dest_ip , 0 ))	# put this in a loop if you want to flood the target
-####################################################################################
-'''
-
-
-
 from socket import AF_INET, SOCK_RAW, IPPROTO_RAW, IPPROTO_TCP
 import socket, argparse, struct, gzip, io, zlib
 from base64 import b64decode
@@ -181,7 +68,7 @@ ip_header = struct.pack('!BBHHHBBH4s4s' , ip_ihl_ver, ip_tos, ip_tot_len, ip_id,
 
 
 # tcp header fields
-tcp_source = 3306	# source port
+tcp_source = 8000 # source port
 tcp_dest = 80	# destination port
 tcp_seq = 454
 tcp_ack_seq = 0
@@ -227,13 +114,12 @@ def tcpwrap(src, dest, seq, ack, flags, awnd, chksm, urg, opt, data):
 
 def tcpunwrap(tcp_packet):
     """
-    Takes a tcp packet and extracts out the header, returning the contained data. Validates the tcp header.
-    :param tcp_packet: the packet to be unwrapped
+    Takes a tcp packet and extracts out the header, returning the contained data. Validates the 
+    :param tcp_packet: the packet to be unwrappedtcp header.
     :return: the unwrapped data
     """
     tcp_header_vals = struct.unpack(tcp_header_format, tcp_packet[0:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
-    # TODO: verify the tcp headers
 
     # check for options
     offset = tcp_headers['off_res'] >> 4
@@ -243,7 +129,12 @@ def tcpunwrap(tcp_packet):
         print('options: ' + str(options))
 
     tcp_data = tcp_packet[4*offset:]
-    return tcp_data
+    
+    if tcp_verify_checksum(tcp_header_vals, options, tcp_data):
+        return tcp_data
+    else:
+        #TCP HEADER OR DATA CHECKSUM HAS FAILED. TODO
+        print ('checksum has failed. replicate TCP ACK behavior')
 
 def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest, data):
     """
@@ -268,7 +159,7 @@ def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, des
 def ipunwrap(ip_packet):
     ip_header_vals = struct.unpack(ip_header_format, ip_packet[0:20])
     ip_headers = dict(zip(ip_header_keys, ip_header_vals))
-    # TODO: verify the ip header is correct
+    
     version = ip_headers['ver_ihl'] >> 4
     if version != 4:
         return None
@@ -282,25 +173,30 @@ def ipunwrap(ip_packet):
     print('protocol: ' + str(ip_headers['proto']))
     if ip_headers['proto'] != 0x06:
         return None
-
+    
     print('size of ip packet: ' + str(ip_headers['tot_len']))
     print('ip_id: ' + str(ip_headers['id']))
     # get the data from the ip packet
     ip_data = ip_packet[4*ihl:]
-    return ip_data
+    
+    if (ip_verify_checksum(ip_header_vals)):
+        return ip_data
+    else:
+        #IP HEADER CHECKSUM HAS FAILED. TODO
+        print ('checksum has failed. replicate TCP ACK behavior')
 
 # Referenced from Suraj Bisht of Bitforestinfo
-def checksum(data):
+def checksum(msg):
     s = 0
 
     # loop taking 2 characters at a time
-    for i in range(0, len(data), 2):
-        if (i+1) < len(data):
-            a = ord(data[i]) 
-            b = ord(data[i+1])
+    for i in range(0, len(msg), 2):
+        if (i+1) < len(msg):
+            a = ord(msg[i]) 
+            b = ord(msg[i+1])
             s = s + (a+(b << 8))
-        elif (i+1)==len(data):
-            s += ord(data[i])
+        elif (i+1)==len(msg):
+            s += ord(msg[i])
         else:
             raise ValueError("Something Wrong here")
 
@@ -311,6 +207,20 @@ def checksum(data):
 
     return s
 
+def tcp_verify_checksum(headerVals, opt, data):
+    checksum = headerVals[7]
+    headerAndData = struct.pack(tcp_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
+            headerVals[5], headerVals[6], headerVals[7], headerVals[8], opt, data)
+    calculatedChecksum = checksum(headerAndData)
+    return (calculatedChecksum == checksum)
+    
+def ip_verify_checksum(headerVals):
+    checksum = headerVals[7]
+    ipHeader = struct.pack(ip_header_format, headerVals[0],headerVals[1],headerVals[2],headerVals[3],headerVals[4],
+            headerVals[5], headerVals[6], headerVals[7], headerVals[8], headerVals[9])
+    calculatedChecksum = checksum(ipHeader)
+    return (calculatedChecksum == checksum)
+    
 # VERY untested. To be completed later.
 def tcp_handshake():
     tcp_seq = 1
@@ -377,7 +287,6 @@ def change_file_name(myUrl):
 
 def run():
     fileName = change_file_name(url)
-    print(fileName)
         
     f = open(fileName, 'wb+')
 
