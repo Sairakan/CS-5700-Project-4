@@ -263,6 +263,7 @@ def change_file_name(myUrl):
             fileName = myUrl[lastSlashIndex + 1:]
     return fileName
 
+# TODO!!!!!! THIS SHOULD BE THE FIRST THING TO DO NEXT TIME!
 def sendPacket():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
