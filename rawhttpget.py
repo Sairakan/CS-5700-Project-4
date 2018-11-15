@@ -356,11 +356,30 @@ def tcp_handshake():
         s.sendto(packet, (dest_ip, 0))
     else:
         print("Handshake failed!")
+        
+def change_file_name(myUrl):
+    fileName = ''
+    if myUrl.startswith('http://'):
+        myUrl = myUrl[7:]
+    elif myUrl.startswith('https://'):
+        myUrl = myUrl[8:]
+        
+    lastSlashIndex = myUrl.rfind('/')
+    if lastSlashIndex == -1:
+        fileName = 'index.html'
+    else:
+        if lastSlashIndex == len(myUrl) - 1:
+            fileName = 'index.html'
+        else:
+            fileName = myUrl[lastSlashIndex + 1:]
+    return fileName
 #############################################################################
 
 def run():
-    # TODO: change the file name based on the given url
-    f = open('index.html', 'wb+')
+    fileName = change_file_name(url)
+    print(fileName)
+        
+    f = open(fileName, 'wb+')
 
     # TODO: perform TCP handshake, get seq/ack numbers for use in rest of program
 
