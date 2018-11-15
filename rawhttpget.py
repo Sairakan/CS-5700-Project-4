@@ -53,8 +53,10 @@ pseudo_header_format = '4s4sBBH'
 trimUrl = url
 if url.startswith('http://'):
     trimUrl = url[7:]
+    url = trimUrl
 elif url.startswith('https://'):
     trimUrl = url[8:]
+    url = trimUrl
 if '/' in trimUrl:
     i = trimUrl.find('/')
     trimUrl = trimUrl[0:i]
