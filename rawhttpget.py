@@ -79,8 +79,13 @@ TTL = 255
 PROTO = socket.IPPROTO_TCP
 SRC_ADDR = socket.inet_aton(hostIP)
 DEST_ADDR = socket.inet_aton(socket.gethostbyname(trimUrl))
+OFFSET = 5
 
-def tcpwrap(seq, ack, flags, opt, data):
+# Global variables
+seq = random.randint(0,1000000)
+ack = 0
+
+def tcpwrap(seq, ack, flags, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
     Returns the new message with the TCP header added. Offset is automatically calculated.
@@ -93,14 +98,13 @@ def tcpwrap(seq, ack, flags, opt, data):
     """
     
     # Create pseudo-header to calculate checksum
-    offset = 5 + len(opt)/4
-    temp_header = pack(tcp_header_format, SRC_PORT, DEST_PORT, seq, ack, offset << 4, 
+    temp_header = pack(tcp_header_format, SRC_PORT, DEST_PORT, seq, ack, OFFSET << 4, 
                       flags,  AWND, URG)
     total_len = len(temp_header) + len(data)
     pseudo_header = pack(pseudo_header_format , SRC_ADDR , DEST_ADDR, 0, PROTO, total_len);
     check = checksum(temp_header + pseudo_header + data)
     
-    tcp_header = pack(tcp_header_format , SRC_PORT, DEST_PORT, seq, ack, offset, flags,  
+    tcp_header = pack(tcp_header_format , SRC_PORT, DEST_PORT, seq, ack, OFFSET, flags,  
                       AWND) + pack('H' , check) + pack('!H' , URG)
     tcp_packet = tcp_header + data
     return tcp_packet
@@ -219,7 +223,7 @@ def tcp_handshake():
     tcp_urg = 0
     tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack << 4) + (tcp_urg << 5)
     
-    #sendPacket(seq, 0, tcp_flags, <SOME OPTIONS>, '')
+    sendPacket(seq, 0, tcp_flags, '', '')
     
     received = s.recvfrom(1024)
     received_ack = received[3]
@@ -227,6 +231,7 @@ def tcp_handshake():
     if seq == received_ack - 1:
         #TODO
         print("Got an ACK back. Time to send an ACK and finish handshake.")
+        seq += 1
     else:
         print("Handshake failed!")
         
@@ -243,8 +248,8 @@ def change_file_name(myUrl):
     return fileName
 
 # Use this without messing with IP wrap and TCP wrap, ideally
-def sendPacket(seq, ack, flags, opt, data):
-    tcpPacket = tcpwrap(seq, ack, flags, opt, data)
+def sendPacket(seq, ack, flags, data):
+    tcpPacket = tcpwrap(seq, ack, flags, data)
     ipPacket = ipwrap(tcpPacket)
     s.sendto(ipPacket, (DEST_ADDR , DEST_PORT))
 #############################################################################
@@ -255,7 +260,9 @@ def run():
     f = open(fileName, 'wb+')
 
     # TODO: perform TCP handshake, get seq/ack numbers for use in rest of program
-
+    # TODO: ADD THAT TRY/CATCH SOCKET CONNECTION HERE!
+    tcp_handshake()
+    
     # TODO: send HTTP GET request (maybe can be done at the end of the handshake?)
 
     # TODO: get the HTTP response (by listening and responding with appropriate acks)
