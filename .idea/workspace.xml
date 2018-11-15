@@ -5,8 +5,11 @@
 <<<<<<< HEAD
 =======
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+<<<<<<< HEAD
       <change beforePath="$PROJECT_DIR$/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/index.html" afterDir="false" />
 >>>>>>> 1b2f40523bbd6d73cb4ccc607ffe88022b5e2b8e
+=======
+>>>>>>> 6506db32010e16695c7157f8c58a76fd818dbca8
       <change beforePath="$PROJECT_DIR$/rawhttpget.py" beforeDir="false" afterPath="$PROJECT_DIR$/rawhttpget.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -28,12 +31,12 @@
       </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
-          <entry key="py" value="373" />
+          <entry key="py" value="2177" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="Python" value="373" />
+          <entry key="Python" value="2177" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.open" />
@@ -79,6 +82,7 @@
         <entry file="file://$PROJECT_DIR$/rawhttpget.py">
           <provider selected="true" editor-type-id="text-editor">
 <<<<<<< HEAD
+<<<<<<< HEAD
             <state relative-caret-position="195">
               <caret line="272" column="35" lean-forward="true" selection-start-line="272" selection-start-column="35" selection-end-line="272" selection-end-column="35" />
               <folding>
@@ -97,6 +101,10 @@
             <state relative-caret-position="490">
               <caret line="282" column="25" lean-forward="true" selection-start-line="282" selection-start-column="25" selection-end-line="282" selection-end-column="25" />
 >>>>>>> 1b2f40523bbd6d73cb4ccc607ffe88022b5e2b8e
+=======
+            <state relative-caret-position="464">
+              <caret line="304" column="52" selection-start-line="304" selection-start-column="52" selection-end-line="304" selection-end-column="52" />
+>>>>>>> 6506db32010e16695c7157f8c58a76fd818dbca8
             </state>
           </provider>
         </entry>
@@ -181,7 +189,7 @@
     <frame x="129" y="13" width="3712" height="1955" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.17948718" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.17948718" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
@@ -192,7 +200,7 @@
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" weight="0.32906976" />
       <window_info anchor="bottom" id="Version Control" order="7" show_stripe_button="false" />
-      <window_info active="true" anchor="bottom" id="Terminal" order="8" visible="true" weight="0.32947308" />
+      <window_info anchor="bottom" id="Terminal" order="8" visible="true" weight="0.32947308" />
       <window_info anchor="bottom" id="Event Log" order="9" side_tool="true" />
       <window_info anchor="bottom" id="Python Console" order="10" weight="0.32906976" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
@@ -221,8 +229,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/rawhttpget.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="490">
-          <caret line="282" column="25" lean-forward="true" selection-start-line="282" selection-start-column="25" selection-end-line="282" selection-end-column="25" />
+        <state relative-caret-position="464">
+          <caret line="304" column="52" selection-start-line="304" selection-start-column="52" selection-end-line="304" selection-end-column="52" />
         </state>
       </provider>
     </entry>

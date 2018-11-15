@@ -128,6 +128,7 @@ url = args.url
 
 sendSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_RAW)
 recSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_TCP)
+recSock.settimeout(180000)
 
 # gets the host ip by creating a connection to Google and observing the socket parameters
 hostIP = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
@@ -202,33 +203,38 @@ tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh <<3) + (tcp_ack
 # the ! in the pack format string means network order
 tcp_header = struct.pack('!HHLLBBHHH' , tcp_source, tcp_dest, tcp_seq, tcp_ack_seq, tcp_offset_res, tcp_flags,  tcp_window, tcp_check, tcp_urg_ptr)
 
-def tcpwrap(src, dest, seq, ack, offset, flags, awnd, chksm, urg, opt, data):
+
+def tcpwrap(src, dest, seq, ack, flags, awnd, chksm, urg, opt, data):
     """
     Takes in TCP header parameters and creates the correct TCP header and adds it to the data.
-    Returns the new message with the TCP header added.
-    PARAMETERS:
-    src: the source port
-    dest: the destination port
-    seq: the sequence number
-    ack: the acknowledgement number
-    offset: the offset
-    flags: any flags
-    awnd: the advertised window
-    chksm: the checksum
-    urg: the urgent pointer
-    opt: any options
-    data: the data to be wrapped
-    RETURNS:
-    the packet wrapped with the TCP header
+    Returns the new message with the TCP header added. Offset is automatically calculated.
+    :param src: the source port
+    :param dest: the destination port
+    :param seq: the sequence number
+    :param ack: the acknowledgment number
+    :param flags: any flags
+    :param awnd: the advertised window
+    :param chksm: the checksum to be used
+    :param urg: the urgent pointer
+    :param opt: any options
+    :param data: the data to be wrapped
+    :return: the packet wrapped with the TCP header
     """
-    tcp_header = struct.pack(tcp_header_format, src, dest, seq, ack, offset, flags, awnd, chksm, urg)
-    tcp_packet = tcp_header + opt + data
+    offset = 5 + len(opt)/4
+    tcp_header = struct.pack('!HHLLBBH', src, dest, seq, ack, offset << 4, flags,  awnd) + struct.pack('H', chksm) + struct.pack('!H', urg) + opt
+    tcp_packet = tcp_header + data
     return tcp_packet
 
 def tcpunwrap(tcp_packet):
+    """
+    Takes a tcp packet and extracts out the header, returning the contained data. Validates the tcp header.
+    :param tcp_packet: the packet to be unwrapped
+    :return: the unwrapped data
+    """
     tcp_header_vals = struct.unpack(tcp_header_format, tcp_packet[0:20])
     tcp_headers = dict(zip(tcp_header_keys, tcp_header_vals))
-    # verify the tcp headers
+    # TODO: verify the tcp headers
+
     # check for options
     offset = tcp_headers['off_res'] >> 4
     print('offset: ' + str(offset))
@@ -239,19 +245,34 @@ def tcpunwrap(tcp_packet):
     tcp_data = tcp_packet[4*offset:]
     return tcp_data
 
-def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest):
+def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest, data):
+    """
+    Takes in the IP header parameters and constructs a IP header, which is added to the given data and returned.
+    :param version: the IP version to use
+    :param ihl: the length of the header, in 4-byte words
+    :param tos: the Type of Service
+    :param tot_len: the total length of the IP packet in bytes (header + data)
+    :param id: the ID of the packet
+    :param frag_off: the fragment offset
+    :param ttl: the time to live of the packet
+    :param proto: the protocol of the enclosed packet
+    :param check: the checksum to be used (must be pre-calculated)
+    :param src: the source IP address
+    :param dest: the destination IP address
+    :return: the full IP packet
+    """
     ver_ihl = (version << 4) + ihl
 
-    # the ! in the pack format string means network order
     return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
 
 def ipunwrap(ip_packet):
     ip_header_vals = struct.unpack(ip_header_format, ip_packet[0:20])
     ip_headers = dict(zip(ip_header_keys, ip_header_vals))
-    # verify the ip header is correct
-
-    ihl = ip_headers['ver_ihl'] & 0xF
-    print('ihl: ' + str(ihl))
+    # TODO: verify the ip header is correct
+    version = ip_headers['ver_ihl'] >> 4
+    if version != 4:
+        return None
+    ihl = ip_headers['ver_ihl'] & 0x0F
 
     # check that this is the destination
     if ip_headers['dest'] != hostIP_hex:
@@ -281,7 +302,7 @@ def checksum(data):
         elif (i+1)==len(data):
             s += ord(data[i])
         else:
-            raise "Something Wrong here"
+            raise ValueError("Something Wrong here")
 
 
     # One's Complement
@@ -337,24 +358,36 @@ def tcp_handshake():
         print("Handshake failed!")
 #############################################################################
 
+def run():
+    # TODO: change the file name based on the given url
+    f = open('index.html', 'wb+')
 
-f = open('index.html', 'wb+')
-for i in range(5):
-    packet = recSock.recv(65565)
-    tcppacket = ipunwrap(packet)
-    if tcppacket:
-        data = tcpunwrap(tcppacket)
-        print(data)
-        if len(data) > 0:
-            try:
-                rawheaders, rawbody = parse_response(data)
-                headers = parse_headers(rawheaders.decode())
-                print('headers: ' + str(headers))
-                print('body: ' + str(rawbody))
-                f.write(rawbody)
-            except UnicodeDecodeError:
-                print('tls packet')
-    else:
-        print('not a tcp packet')
+    # TODO: perform TCP handshake, get seq/ack numbers for use in rest of program
 
-f.close()
+    # TODO: send HTTP GET request (maybe can be done at the end of the handshake?)
+
+    # TODO: get the HTTP response (by listening and responding with appropriate acks)
+    for i in range(5):
+        packet = recSock.recv(65565)
+        tcppacket = ipunwrap(packet)
+        if tcppacket:
+            data = tcpunwrap(tcppacket)
+            print(data)
+            if len(data) > 0:
+                try:
+                    rawheaders, rawbody = parse_response(data)
+                except UnicodeDecodeError:
+                    print('tls packet')
+                try:
+                    headers = parse_headers(rawheaders.decode())
+                    print('headers: ' + str(headers))
+                    print('body: ' + str(rawbody))
+                    f.write(rawbody)
+                except IndexError:
+                    print('body: ' + str(rawbody))
+        else:
+            print('not a tcp packet')
+
+    f.close()
+
+run()
