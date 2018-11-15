@@ -240,7 +240,7 @@ def tcpunwrap(tcp_packet):
     return tcp_data
 
 def ipwrap(version, ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest):
-    ver_ihl = (ip_ver << 4) + ip_ihl
+    ver_ihl = (version << 4) + ihl
 
     # the ! in the pack format string means network order
     return struct.pack(ip_header_format, ver_ihl, tos, tot_len, id, frag_off, ttl, proto, check, src, dest)
@@ -319,9 +319,9 @@ def tcp_handshake():
     
     # final full packet - syn packets dont have any data
     packet = ip_header + tcp_header
-    s.sendto(packet, (dest_ip , 0 ))
+    sendSock.sendto(packet, (dest_ip , 0 ))
     
-    received = s.recvfrom(1024)
+    received = recSock.recvfrom(1024)
     received_ack = received[3]
     
     if tcp_seq == received_ack - 1:
@@ -332,9 +332,9 @@ def tcp_handshake():
                             struct.pack('H' , new_check),
                             struct.pack('!H' , tcp_urg_ptr))
         packet = ip_header + tcp_header
-        s.sendto(packet, (dest_ip, 0))
+        sendSock.sendto(packet, (dest_ip, 0))
     else:
-        print "Handshake failed!"
+        print("Handshake failed!")
 #############################################################################
 
 
