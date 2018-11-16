@@ -19,7 +19,7 @@ url = args.url
 
 sendSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_RAW)
 recSock = socket.socket(AF_INET, SOCK_RAW, IPPROTO_TCP)
-TIMEOUT = 3
+TIMEOUT = 60
 recSock.settimeout(TIMEOUT)
 
 # gets the host ip by creating a connection to Google and observing the socket parameters
@@ -74,7 +74,7 @@ if '/' in trimUrl:
 SRC_PORT = random.randint(1024, 65530)
 DEST_PORT = 80
 OFFSET = 5
-AWND = socket.htons(1500)  # MTU of ethernet
+AWND = socket.htons(1000)  # MTU of ethernet
 URG = 0
 
 # IP Side
@@ -138,7 +138,6 @@ def tcpunwrap(tcp_packet):
 
     # check for options
     offset = tcp_headers['off_res'] >> 4
-    print('offset: ' + str(offset))
     options = b''
     if offset > 5:
         options = tcp_packet[20:4*offset]
@@ -191,12 +190,9 @@ def ipunwrap(ip_packet):
         raise ValueError("invalid destination IP address")
 
     # check that is tcp packet
-    print('protocol: ' + str(ip_headers['proto']))
     if ip_headers['proto'] != 0x06:
         raise ValueError("Not TCP packet")
-    
-    print('size of ip packet: ' + str(ip_headers['tot_len']))
-    print('ip_id: ' + str(ip_headers['id']))
+
     # get the data from the ip packet
     ip_data = ip_packet[4*ihl:]
     
@@ -233,9 +229,8 @@ def tcp_verify_checksum(pseudo_header, headerVals, opt, data):
              headerVals[3], headerVals[4], headerVals[5], headerVals[6], 0, headerVals[8]) + \
         opt + data
     calculatedChecksum = checksum(headerAndData)
-    print('calculated tcp checksum: ' + hex(calculatedChecksum))
     return calculatedChecksum == chcksm
-    
+
 def ip_verify_checksum(headerVals):
     chcksm = headerVals[7]
     ipHeader = pack(ip_header_format, headerVals[0], headerVals[1], headerVals[2], headerVals[3], headerVals[4],
@@ -260,7 +255,7 @@ def tcp_handshake():
 
     starttime = time.clock()
     while True:
-        if time.clock() > starttime + 3:
+        if time.clock() > starttime + TIMEOUT:
             closeConnection()
             break
         try:
@@ -283,8 +278,6 @@ def tcp_handshake():
 
     rec_ack = tcp_headers['ack']
     if seq == rec_ack - 1:
-        # TODO
-        print("Got an ACK back. Time to send an ACK and finish handshake.")
         # finish handshake
         # increment sequence number
         seq += 1
@@ -366,21 +359,42 @@ def putPacketsInOrder(packet):
     return orderedPackets
 
 def closeConnection():
-    pass
-    """
     print("closing connection")
     global seq, ack
-    # tcp flags
-    tcp_fin = 1
-    tcp_syn = 0
-    tcp_rst = 0
-    tcp_psh = 0
-    tcp_ack = 0
-    tcp_urg = 0
-    tcp_flags = tcp_fin + (tcp_syn << 1) + (tcp_rst << 2) + (tcp_psh << 3) + (tcp_ack << 4) + (tcp_urg << 5)
 
-    sendPacket(seq, ack, tcp_flags, '')
-    """
+    sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x11, '')
+
+    starttime = time.clock()
+    while True:
+        if time.clock() > starttime + TIMEOUT:
+            return
+        try:
+            ip_packet = recSock.recv(65536)
+        except socket.timeout:
+            return
+        try:
+            ip_headers, ip_data = ipunwrap(ip_packet)
+        except ValueError:
+            continue
+        try:
+            tcp_headers, tcp_data = tcpunwrap(ip_data)
+            # check for a fin/ack message
+            if tcp_headers['flags'] & 0x11 != 0x11:
+                continue
+            break
+        except ValueError:
+            continue
+
+    rec_ack = tcp_headers['ack']
+    if seq + SEQ_OFFSET == rec_ack - 1:
+        # finish teardown
+        # get the ack number from the SYN/ACK
+        rec_seq = tcp_headers['seq']
+        fin_ack = rec_seq + 1
+        # set the flags to ack
+        tcp_flags = 0x10
+        sendPacket(seq + SEQ_OFFSET + 1, fin_ack, tcp_flags, '')
+
 
 #############################################################################
 def run():
@@ -434,19 +448,22 @@ Host: ''' + trimUrl + '\r\n\r\n'
         rec_ack = tcp_headers['ack']
         if seq + SEQ_OFFSET == rec_ack:
             if len(data) > 0:
-                try:
-                    rawheaders, rawbody = parse_response(data)
-                except UnicodeDecodeError:
-                    print('tls packet')
-                try:
-                    headers = parse_headers(rawheaders.decode())
-                    print('headers: ' + str(headers))
-                    filesize = int(headers['Content-Length'])
-                    print('body: ' + str(rawbody))
-                    bytes_written += f.write(rawbody)
-                except IndexError:
-                    print('body: ' + str(rawbody))
-                    bytes_written += f.write(rawbody)
+                if filesize == 0:
+                    try:
+                        rawheaders, rawbody = parse_response(data)
+                    except UnicodeDecodeError:
+                        print('tls packet')
+                    try:
+                        headers = parse_headers(rawheaders.decode())
+                        print('headers: ' + str(headers))
+                        filesize = int(headers['Content-Length'])
+                        print('body: ' + str(rawbody))
+                        bytes_written += f.write(rawbody)
+                    except IndexError:  # still part of an http response, just get the data
+                        print('body: ' + str(data))
+                        bytes_written += f.write(data)
+                else:
+                    bytes_written += f.write(data)
                 # check for end of file
                 if bytes_written >= filesize:
                     return
@@ -458,6 +475,8 @@ Host: ''' + trimUrl + '\r\n\r\n'
 
         else:
             print("sequence mismatch (out of order or other error")
+            # retransmit the most recent ACK
+            sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x10, '')
     # AFTERWARDS! call packetInOrder(packet)
     # if returns false, run bufferPacket(packet)
     # then upon the first True-returned packetInOrder, call putPacketsInOrder
