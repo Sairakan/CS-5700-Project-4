@@ -74,7 +74,7 @@ if '/' in trimUrl:
 SRC_PORT = random.randint(1024, 65530)
 DEST_PORT = 80
 OFFSET = 5
-AWND = socket.htons(1000)  # MTU of ethernet
+AWND = 65535  # MTU of ethernet
 URG = 0
 
 # IP Side
@@ -446,7 +446,8 @@ Host: ''' + trimUrl + '\r\n\r\n'
             return
 
         rec_ack = tcp_headers['ack']
-        if seq + SEQ_OFFSET == rec_ack:
+        rec_seq = tcp_headers['seq']
+        if seq + SEQ_OFFSET == rec_ack and ack + ACK_OFFSET == rec_seq:
             if len(data) > 0:
                 if filesize == 0:
                     try:
@@ -457,18 +458,19 @@ Host: ''' + trimUrl + '\r\n\r\n'
                         headers = parse_headers(rawheaders.decode())
                         print('headers: ' + str(headers))
                         filesize = int(headers['Content-Length'])
-                        print('body: ' + str(rawbody))
+                        # print('body: ' + str(rawbody))
                         bytes_written += f.write(rawbody)
                     except IndexError:  # still part of an http response, just get the data
-                        print('body: ' + str(data))
+                        # print('body: ' + str(data))
                         bytes_written += f.write(data)
                 else:
                     bytes_written += f.write(data)
                 # check for end of file
+                print("File size: " + str(filesize) + " bytes written: " + str(bytes_written) + " len(data): " + str(len(data)))
                 if bytes_written >= filesize:
                     return
 
-            # set the flags to ack
+            # send an ack packet
             tcp_flags = 0x10
             ACK_OFFSET += len(data)
             sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, tcp_flags, '')
