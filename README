@@ -1,0 +1,13 @@
+# CS-5700-Project-4
+
+Authors:
+
+Jason Teng: 001876580
+
+Seung Son: 001894138
+
+# Note: Please use ethtools to disable checksum offloading prior to running the script. This cannot be automated in the bash script due to the fact that we are unable to determine which network adapter the program will be using during execution. The script must also be run while the user has root access.
+
+Jason Teng worked on developing the TCP and IP unwrappers, as well as the handshake and parsing the input. There was a lot of difficulty in calculating the TCP checksum correctly, both due to programmer error as well as confusion with network-order versus system-order encoding. Wireshark was helpful in determining where the checksum calculation was failing, as well as monitoring the connection status after the wrappers were completed. Our initial implementation for receiving packets was very naive, not buffering any packets at all, and dropping any packets which were not the next expected packet. This led to severely decreased performance on lossy networks, or if the system was slow, as was the case sometimes when running the program in a VM. 
+
+Seung Son worked on developing the TCP and IP wrappers, the initial sending functionality, the initial checksum calculations, and the parts dealing with the file name. The difficulty in the wrapping of the packets came mostly because it was unclear what the "correct" procedure was when imitating TCP using raw sockets. For example, it was initially unknown that a pseudo header was necessary to calculate the TCP checksum, which caused many errors. Although it was first unclear why both TCP and IP headers required checksums, it was soon clear after a little research that while the IP checksum only checks for the IP Header's checksum, the TCP Header's checksum checks for both the TCP header's and payload's checksum. The renaming of the file according to the given URL was smooth and without complications.

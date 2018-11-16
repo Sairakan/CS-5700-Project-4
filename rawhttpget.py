@@ -7,7 +7,6 @@ import socket
 import argparse
 import random
 import time
-import binascii
 from struct import pack, unpack
 
 parser = argparse.ArgumentParser(description='Client script for Project 4')
@@ -152,7 +151,6 @@ def tcpunwrap(tcp_packet):
     if tcp_verify_checksum(pseudo_header, tcp_header_vals, options, tcp_data):
         return tcp_headers, tcp_data
     else:
-        #TCP HEADER OR DATA CHECKSUM HAS FAILED. TODO
         print ('tcp checksum has failed. replicate TCP ACK behavior')
         raise ValueError("incorrect TCP checksum")
 
@@ -199,7 +197,6 @@ def ipunwrap(ip_packet):
     if (ip_verify_checksum(ip_header_vals)):
         return ip_headers, ip_data
     else:
-        #IP HEADER CHECKSUM HAS FAILED. TODO
         print ('ip checksum has failed. replicate TCP ACK behavior')
         raise ValueError("invalid IP checksum")
 
@@ -219,7 +216,6 @@ def checksum(msg):
         s = (s & 0xffff) + (s >> 16)
 
     # complement and mask to 2 byte short
-    res = ~s & 0xffff
     return ~s & 0xffff
 
 def tcp_verify_checksum(pseudo_header, headerVals, opt, data):
@@ -238,8 +234,6 @@ def ip_verify_checksum(headerVals):
     calculatedChecksum = checksum(ipHeader)
     return calculatedChecksum == chcksm
     
-# VERY untested. To be completed later.
-# TODO: finish function and test
 def tcp_handshake():
     global seq, ack, SEQ_OFFSET, ACK_OFFSET
     #tcp flags
@@ -309,55 +303,6 @@ def sendPacket(seq, ack, flags, data):
     ipPacket = ipwrap(tcpPacket)
     sendSock.sendto(ipPacket, (socket.gethostbyname(trimUrl), DEST_PORT))
     
-def packetInOrder(packet):
-    global lastOrderedSeq
-    tcpPacket = ipunwrap(packet)
-    tcp_header_vals = unpack(tcp_header_format, tcpPacket[0:20])
-    
-    packetSeq = tcp_header_vals[2]
-    if packetSeq == lastOrderedSeq + 1:
-        lastOrderedSeq += 1
-        return True
-    else:
-        return False
-
-def bufferPacket(packet):
-    packetBuffer.append(packet)
-    if len(packetBuffer) > 10:
-        packetBuffer.clear()
-        print ("Packet probably dropped. Resend the appropriate request.")
-        #TODO: Resend GET request
-        
-def putPacketsInOrder(packet):
-    # Returns list of in-order packets while updating lastOrderedSeq 
-    global lastOrderedSeq
-    global packetBuffer
-    
-    tcpPkt = ipunwrap(packet)
-    tcpHeader = unpack(tcp_header_format, tcpPkt[0:20])
-    pktSeq = tcpHeader[2]
-    lastSeq = pktSeq    
-    
-    orderedPackets = [packet]
-    temp = packetBuffer
-    
-    i = 0
-    while i < len(packetBuffer):
-        p = packetBuffer[i]
-        tcpPacket = ipunwrap(p)
-        tcp_header_vals = unpack(tcp_header_format, tcpPacket[0:20])
-        packetSeq = tcp_header_vals[2]
-        
-        if packetSeq == lastSeq + 1:
-            orderedPackets.append(p)
-            lastSeq += 1
-            temp.remove(p)
-        
-        i += 1
-    packetBuffer = temp
-    lastOrderedSeq = lastSeq
-    return orderedPackets
-
 def closeConnection():
     print("closing connection")
     global seq, ack
@@ -405,7 +350,6 @@ def run():
     filesize = 0
     bytes_written = 0
 
-    # TODO: ADD THAT TRY/CATCH SOCKET CONNECTION HERE!
     tcp_handshake()
 
     # send the HTTP GET request
@@ -416,7 +360,6 @@ Host: ''' + trimUrl + '\r\n\r\n'
     sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x10, get_request)
     SEQ_OFFSET += len(get_request)
 
-    # TODO: get the HTTP response (by listening and responding with appropriate acks)
     done = False
     while not done:
         starttime = time.clock()
@@ -479,9 +422,6 @@ Host: ''' + trimUrl + '\r\n\r\n'
             print("sequence mismatch (out of order or other error")
             # retransmit the most recent ACK
             sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x10, '')
-    # AFTERWARDS! call packetInOrder(packet)
-    # if returns false, run bufferPacket(packet)
-    # then upon the first True-returned packetInOrder, call putPacketsInOrder
 
     f.close()
 
