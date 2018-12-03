@@ -419,7 +419,7 @@ Host: ''' + trimUrl + '\r\n\r\n'
             sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, tcp_flags, '')
 
         else:
-            print("sequence mismatch (out of order or other error")
+            print("sequence mismatch (out of order or other error)")
             # retransmit the most recent ACK
             sendPacket(seq + SEQ_OFFSET, ack + ACK_OFFSET, 0x10, '')
 
