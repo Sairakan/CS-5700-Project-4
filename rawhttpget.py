@@ -73,7 +73,7 @@ if '/' in trimUrl:
 SRC_PORT = random.randint(1024, 65530)
 DEST_PORT = 80
 OFFSET = 5
-AWND = 65535  # MTU of ethernet
+AWND = 2000
 URG = 0
 
 # IP Side
